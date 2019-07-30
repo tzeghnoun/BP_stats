@@ -18,6 +18,7 @@ $('.navbar-inverse').removeClass('navbar-inverse').addClass('navbar-default');
 ```{r setup, include=FALSE}
 
 library(flexdashboard) # Dashboard package
+source("bp_stats_load_clean.R") 
 ```
 
 <style>                     
@@ -44,6 +45,24 @@ Primary Energy {data-icon="fa-signal"}
 ### __World enegy consumption__ {.no-padding data-icon="fa-signal"}
 ```{r fig.height=3, message=FALSE, warning=FALSE}
 
+# create DT for Primary Energy Consumption (Million tonnes oil equivalent)
+energy_cons <- wide_to_long_1(2) 
+setDT(energy_cons)
+energy_cons <- energy_cons[, .(primary_energy_consumption = round(as.numeric(.SD), 2)), by = .(country,year), .SDcols=3]
+
+# Add regions & clean unused rows (totals & remarks)  
+energy_cons <- get_regions(energy_cons)
+
+# Create a line plot.
+highchart() %>% 
+    hc_add_series(energy_cons[, list(total_rg = sum(primary_energy_consumption, na.rm = T)), by = c("region", "year")], hcaes(x = year, y = total_rg, group = region, color = region), type = "line") %>%
+    hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Year: <b>{point.x}</b> <br>","region: <b>{point.region}</b><br>", "Consumption: <b>{point.y}</b>")) %>%
+    hc_title(text = "Total primary energy consumption by region") %>% 
+    hc_subtitle(text = "Mtoe") %>%
+    hc_xAxis(title = list(text = "Year")) %>%
+    hc_yAxis(title = list(text = "Primary Energy: Consumption - Mtoe (from 1965)")) %>% 
+    hc_legend(enabled = F) %>% 
+    hc_add_theme(hc_theme_economist())
 
 ```
 
@@ -51,13 +70,78 @@ Primary Energy {data-icon="fa-signal"}
 ### __Consumption by fuel__  {.no-padding}
 ```{r fig.height=3}
 
+# create DT for Primary Energy Consumption by fuel (Million tonnes oil equivalent)
+fuel <- as.data.table(bp_stats$list.element[[3]]) %>% 
+                        setNames(c("country", "oil_17", "ngas_17", "coal_17", "nuclear_17", "hydroelectric_17", 
+                                   "renewables_17", "total_17", "oil_18", "ngas_18", "coal_18", "nuclear_18", "hydroelectric_18", 
+                                   "renewables_18", "total_18")) %>%
+  .[, idx := if_else(str_detect(country, "^Total"), .I, 0L)] %>% #create an index that detect row numbers where the country column is a name of the region (i.e Total Africa)  
+  na.omit(., cols="country") %>%
+   add_row() # add a row to help getting rid of the last rows that represent comments  
+
+# Add regions & clean unused rows (totals & remarks)  
+fuel <- get_regions(fuel)
+
+# create an aggregated DT by fuel by region
+fuel_region <- fuel[, lapply(.SD, sum, na.rm=TRUE), .SDcols=2:15, by = region]
+
+# create a DT of total consumption of fuel for 2017 & 2018 for plotting
+
+fuel_plot_data <- melt(fuel_region, id.vars = c("region"), measure.vars = c("oil_17", "ngas_17", "coal_17", "nuclear_17", "hydroelectric_17", "renewables_17", "total_17", "oil_18", "ngas_18", "coal_18", "nuclear_18", "hydroelectric_18", "renewables_18", "total_18")) %>% # MElting our DT (from large to wide table)
+ .[, c("fuel", "tmp") := tstrsplit(variable, "_", fixed=TRUE) # Separate the column in two variables
+   ] %>% 
+  .[, .(year = if_else(str_detect(tmp, "17"), 2017, 2018),
+        fuel_cons=round(sum(value, na.rm = T))), by = .(region, fuel, tmp)] 
+  
+# Create line plot.
+hchart(fuel_plot_data[year == "2018", .(region, fuel_cons, freq =paste0(round((100*fuel_cons)/sum(fuel_cons, na.rm = TRUE), 2), "%")), by = .(fuel)], "column", hcaes(x = fuel, y = fuel_cons, group = region)) %>%
+    hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("region: <b>{point.region}</b><br>", "Consumption: <b>{point.y}</b><br>", "Contribution: <b>{point.freq}</b>")) %>%
+    hc_title(text = "Total primary energy consumption by fuel") %>%
+    hc_subtitle(text = "Million tonnes oil equivalent") %>%
+    hc_xAxis(title = list(text = "fuel")) %>%
+  hc_yAxis(title = list(text = "Primary Energy Consumption by fuel in 2018")) %>%
+  hc_add_theme(hc_theme_economist())
 
 ```
 
 
 ### __Contribution to primary energy growth__ {.no-padding}
 ```{r fig.height=3}
+# Summarize the contribution to primary energy growth for 2018.  
 
+contribution_18 <- energy_cons[year %in% c(2017, 2018) & country != "USSR"
+                               ][order(-primary_energy_consumption)
+                                 ][, country_rank := ifelse(.I <=8, country, region)
+                                   ][, .(total_cons = sum(primary_energy_consumption, na.rm = T)), by = c("country_rank", "year", "region")]
+
+# Extract the regions of top 4 contributeurs to convert them to Other regions for the other countries belonging to those regions (here : Other America, Other Asia & Other CIS)
+region_rank <- contribution_18[1:8,  .(region = unique(region))]
+
+contribution_18 <- contribution_18[, country_rank := ifelse(country_rank %in% region_rank$region, paste0("other_", country_rank), country_rank)][order(-year, -total_cons)][!is.na(region)][order(year, - total_cons)]
+
+# Calculate top 3 contributors in 2018
+
+# Adding the difference Y-on-Y by for each country & for the total (lag) in order to calculate the percentage of contribution to the growth by country / region
+
+Annual_gr <- na.omit(contribution_18[order(year)
+                                     ][, lapply(.SD, function(x) 
+                                       x-shift(x)), by = country_rank, .SDcols=4
+                                       ][, c("country", "diff_17_18", "contribution_18", "total_cons", "country_rank") := .(country_rank, total_cons, round(100*total_cons / sum(total_cons, na.rm = T), 2), NULL, NULL)
+                                         ])[order(-contribution_18)]
+
+                               
+top_3_contr <- Annual_gr[, head(.SD, 3), .SDcols=c("country", "contribution_18")][, .(contrib = sum(contribution_18))] %>% 
+  pull()
+
+# Create a line plot.
+highchart() %>%
+    hc_add_series(Annual_gr, hcaes(x = country, y = contribution_18, group = country), type = "column") %>%
+    hc_tooltip(pointFormat = paste("<b>{point.y} %</b>")) %>%
+    hc_title(text = "Contribution to primary energy growth in 2018 (%)") %>%
+    hc_subtitle(text = "Mtoe") %>%
+    hc_yAxis(title = list(text = "Contribution to primary energy growth (%)"),
+             labels = list(format = "{value}%")) %>%
+  hc_add_theme(hc_theme_538())
 
 ```
 
@@ -66,26 +150,35 @@ Column {data-width=300}
 -----------------------------------------------------------------------
 
 ```{r include=FALSE}
+# Calculating 2018 growth compared to 2017 (= (cons_18 - cons_17) / cons_2017)
+growth_17_18  <- round(100*(energy_cons[, list(total_rg = sum(primary_energy_consumption, na.rm = T)), by = c("region", "year")][year == 2018, list(cons_2018 = sum(total_rg, na.rm = T))] - energy_cons[, list(total_rg = sum(primary_energy_consumption, na.rm = T)), by = c("region", "year")][year == 2017, list(cons_2017 = sum(total_rg, na.rm = T))]) / energy_cons[, list(total_rg = sum(primary_energy_consumption, na.rm = T)), by = c("region", "year")][year == 2017, list(cons_2017 = sum(total_rg, na.rm = T))], 1)
 
+# Functions for the boxvalues
+Growth_Global_Primary_Energy = function(...) return(growth_17_18)
+NaturalGas = function(...) return("40%") # Should calculate it & put the variable instead
+Contribution = function(...) return(top_3_contr)
 
 ```
 
 ### Growth of global primary energy consumption.
 
 ```{r}
-valueBox("... %", icon = "fa-percent", color = "orange")
+articles = Growth_Global_Primary_Energy()
+valueBox(articles, icon = "fa-percent", color = "orange")
 ```
 
-### By fuel, energy consumption growth.
+### Energy consumption growth driven by natural gas (40%).
 
 ```{r}
-valueBox("... %", icon = "fa-percent", color = "orange")
+comments = NaturalGas()
+valueBox(comments, icon = "fa-cogs", color = "orange")
 ```
 
-### Global increase in energy demand.
+### China, US & India accounted for more than two thirds of the global increase in energy demand.
 
 ```{r}
-valueBox("... %", icon = "fa-percent", color = "orange")
+cont = Contribution()
+valueBox(cont, icon = "fa-area-chart", color = "orange")
 ```
 
 
