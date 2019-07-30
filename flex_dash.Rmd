@@ -1,0 +1,320 @@
+---
+title: "DASHBOARD" 
+date: "`r Sys.Date()`"
+output: 
+  flexdashboard::flex_dashboard:
+    social: ["menu"]
+    source_code: embed
+    vertical_layout: fill
+    theme: united
+---
+
+This dashboard displays energy data from  [BP Statistical Review of the World 2019](https://www.bp.com/en/global/corporate/energy-economics/statistical-review-of-world-energy.html).
+
+``` {js}
+$('.navbar-inverse').removeClass('navbar-inverse').addClass('navbar-default');
+```
+
+```{r setup, include=FALSE}
+
+library(flexdashboard) # Dashboard package
+```
+
+<style>                     
+.navbar {
+  background-color:#003D79;
+  border-color:white;
+
+}
+
+.custom {
+    background-color: aliceblue;
+    border-color: #ffffff;
+}
+
+</style>
+
+
+Primary Energy {data-icon="fa-signal"}
+=======================================================================
+
+ Column {.tabset .tabset-fade data-width=550 .custom }
+-----------------------------------------------------------------------
+
+### __World enegy consumption__ {.no-padding data-icon="fa-signal"}
+```{r fig.height=3, message=FALSE, warning=FALSE}
+
+
+```
+
+
+### __Consumption by fuel__  {.no-padding}
+```{r fig.height=3}
+
+
+```
+
+
+### __Contribution to primary energy growth__ {.no-padding}
+```{r fig.height=3}
+
+
+```
+
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+
+```{r include=FALSE}
+
+
+```
+
+### Growth of global primary energy consumption.
+
+```{r}
+valueBox("... %", icon = "fa-percent", color = "orange")
+```
+
+### By fuel, energy consumption growth.
+
+```{r}
+valueBox("... %", icon = "fa-percent", color = "orange")
+```
+
+### Global increase in energy demand.
+
+```{r}
+valueBox("... %", icon = "fa-percent", color = "orange")
+```
+
+
+Oil {data-icon="fa-signal"} 
+========================================================================
+
+Column {.tabset .tabset-fade data-width=550 .custom }
+-----------------------------------------------------------------------
+
+### __Map of Oil Reserves by country in 2018__ {.custom }
+```{r fig.height=3}
+
+```
+
+### __Global oil production__ {.custom }
+```{r fig.height=3}
+
+
+```
+
+### __Oil proved, production & consumption__ {.no-padding .custom }
+```{r fig.height=3}
+
+  
+```
+
+### __Refinery throughput__ {.no-padding .custom }
+```{r fig.height=3}
+
+
+```
+
+
+
+### __Regional refining margins__ {.no-padding .custom }
+```{r fig.height=3}
+
+
+
+```
+
+### __Spot crude prices ($/bbl)__ {.no-padding}
+```{r fig.height=3}
+
+```
+
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+
+
+```{r include=FALSE}
+
+
+```
+
+### Annual average Dated Brent 2018.
+
+```{r}
+ 
+```
+
+### Oil consumption.
+
+```{r}
+
+```
+
+### Global oil production.
+
+```{r}
+
+```
+
+### Refinery throughput.
+
+```{r}
+ 
+```
+
+
+Gas {data-icon="fa-signal"}
+========================================================================
+
+Column {.tabset .tabset-fade data-width=550 .custom }
+-----------------------------------------------------------------------
+
+### __Map of Gas Reserves by country in 2018__ {.custom }
+```{r fig.height=3}
+
+
+
+```
+
+### __Natural gas consumption__ {.no-padding}
+```{r fig.height=3}
+
+
+
+
+```
+
+### __Growth in gas consumption__ {.no-padding}
+```{r fig.height=3}
+
+
+```
+
+### __Global natural gas production__ {.no-padding}
+```{r fig.height=3}
+
+
+```
+
+### __Growth in inter-regional natural gas trade__ {.no-padding}
+```{r message=FALSE, warning=FALSE}
+
+```
+
+### __LNG trade movements 2018__ {.no-padding}
+```{r }
+ 
+```
+
+### __Gas prices ($/Million Btu)__ {.no-padding}
+```{r fig.height=3}
+ 
+```
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+
+
+```{r include=FALSE}
+ 
+```
+
+### Global natural gas production.
+
+```{r}
+ 
+```
+
+
+###  Natural gas consumption.
+
+```{r}
+ 
+```
+
+### Growth in gas consumption.
+
+```{r}
+ 
+```
+
+
+Renewables, hydro and nuclear {data-icon="fa-signal"}
+========================================================================
+
+Column {.tabset .tabset-fade data-width=550 .custom }
+-----------------------------------------------------------------------
+
+### __Renewable Energy Generation by source (Terawatt-hours)__ {.no-padding}
+```{r fig.height=3}
+ 
+```
+
+### __Contribution by country__ {.no-padding}
+```{r fig.height=3}
+ 
+```
+
+### __Hydroelectric generation__ {.no-padding}
+```{r fig.height=3}
+ 
+```
+
+### __Nuclear generation__ {.no-padding}
+```{r fig.height=3}
+ 
+```
+
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+
+### {.no-padding  }
+```{r fig.height=3}
+
+```
+
+Electricity {data-icon="fa-signal"}
+========================================================================
+
+Column {.tabset .tabset-fade data-width=550 .custom }
+-----------------------------------------------------------------------
+
+### __Electricity generation__ {.no-padding}
+```{r fig.height=3}
+ 
+```
+
+### __Contribution by source__ {.no-padding}
+```{r fig.height=3}
+ 
+
+```
+
+### __Share of renewables in power generation__ {.no-padding}
+```{r fig.height=3}
+ 
+```
+
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+
+### {.no-padding  }
+```{r fig.height=3}
+
+```
+
+
+About {data-icon="fa-info-circle"}
+=======================================================================
+
+Column {data-width=600}
+-----------------------------------------------------------------------
+
+### { .custom }
+
