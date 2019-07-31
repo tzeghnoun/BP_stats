@@ -3,7 +3,7 @@ title: "DASHBOARD"
 date: "`r Sys.Date()`"
 output: 
   flexdashboard::flex_dashboard:
-    social: ["menu"]
+    # social: ["menu"]
     source_code: embed
     vertical_layout: fill
     theme: united
@@ -44,12 +44,10 @@ Primary Energy {data-icon="fa-signal"}
 
 ### __World enegy consumption__ {.no-padding data-icon="fa-signal"}
 ```{r fig.height=3, message=FALSE, warning=FALSE}
-
 # create DT for Primary Energy Consumption (Million tonnes oil equivalent)
 energy_cons <- wide_to_long_1(2) 
 setDT(energy_cons)
 energy_cons <- energy_cons[, .(primary_energy_consumption = round(as.numeric(.SD), 2)), by = .(country,year), .SDcols=3]
-
 # Add regions & clean unused rows (totals & remarks)  
 energy_cons <- get_regions(energy_cons)
 
@@ -69,7 +67,6 @@ highchart() %>%
 
 ### __Consumption by fuel__  {.no-padding}
 ```{r fig.height=3}
-
 # create DT for Primary Energy Consumption by fuel (Million tonnes oil equivalent)
 fuel <- as.data.table(bp_stats$list.element[[3]]) %>% 
                         setNames(c("country", "oil_17", "ngas_17", "coal_17", "nuclear_17", "hydroelectric_17", 
@@ -78,21 +75,17 @@ fuel <- as.data.table(bp_stats$list.element[[3]]) %>%
   .[, idx := if_else(str_detect(country, "^Total"), .I, 0L)] %>% #create an index that detect row numbers where the country column is a name of the region (i.e Total Africa)  
   na.omit(., cols="country") %>%
    add_row() # add a row to help getting rid of the last rows that represent comments  
-
 # Add regions & clean unused rows (totals & remarks)  
 fuel <- get_regions(fuel)
-
 # create an aggregated DT by fuel by region
 fuel_region <- fuel[, lapply(.SD, sum, na.rm=TRUE), .SDcols=2:15, by = region]
-
 # create a DT of total consumption of fuel for 2017 & 2018 for plotting
-
 fuel_plot_data <- melt(fuel_region, id.vars = c("region"), measure.vars = c("oil_17", "ngas_17", "coal_17", "nuclear_17", "hydroelectric_17", "renewables_17", "total_17", "oil_18", "ngas_18", "coal_18", "nuclear_18", "hydroelectric_18", "renewables_18", "total_18")) %>% # MElting our DT (from large to wide table)
  .[, c("fuel", "tmp") := tstrsplit(variable, "_", fixed=TRUE) # Separate the column in two variables
    ] %>% 
   .[, .(year = if_else(str_detect(tmp, "17"), 2017, 2018),
         fuel_cons=round(sum(value, na.rm = T))), by = .(region, fuel, tmp)] 
-  
+
 # Create line plot.
 hchart(fuel_plot_data[year == "2018", .(region, fuel_cons, freq =paste0(round((100*fuel_cons)/sum(fuel_cons, na.rm = TRUE), 2), "%")), by = .(fuel)], "column", hcaes(x = fuel, y = fuel_cons, group = region)) %>%
     hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("region: <b>{point.region}</b><br>", "Consumption: <b>{point.y}</b><br>", "Contribution: <b>{point.freq}</b>")) %>%
@@ -108,27 +101,20 @@ hchart(fuel_plot_data[year == "2018", .(region, fuel_cons, freq =paste0(round((1
 ### __Contribution to primary energy growth__ {.no-padding}
 ```{r fig.height=3}
 # Summarize the contribution to primary energy growth for 2018.  
-
 contribution_18 <- energy_cons[year %in% c(2017, 2018) & country != "USSR"
                                ][order(-primary_energy_consumption)
                                  ][, country_rank := ifelse(.I <=8, country, region)
                                    ][, .(total_cons = sum(primary_energy_consumption, na.rm = T)), by = c("country_rank", "year", "region")]
-
 # Extract the regions of top 4 contributeurs to convert them to Other regions for the other countries belonging to those regions (here : Other America, Other Asia & Other CIS)
 region_rank <- contribution_18[1:8,  .(region = unique(region))]
-
 contribution_18 <- contribution_18[, country_rank := ifelse(country_rank %in% region_rank$region, paste0("other_", country_rank), country_rank)][order(-year, -total_cons)][!is.na(region)][order(year, - total_cons)]
-
 # Calculate top 3 contributors in 2018
-
 # Adding the difference Y-on-Y by for each country & for the total (lag) in order to calculate the percentage of contribution to the growth by country / region
-
 Annual_gr <- na.omit(contribution_18[order(year)
                                      ][, lapply(.SD, function(x) 
                                        x-shift(x)), by = country_rank, .SDcols=4
                                        ][, c("country", "diff_17_18", "contribution_18", "total_cons", "country_rank") := .(country_rank, total_cons, round(100*total_cons / sum(total_cons, na.rm = T), 2), NULL, NULL)
                                          ])[order(-contribution_18)]
-
                                
 top_3_contr <- Annual_gr[, head(.SD, 3), .SDcols=c("country", "contribution_18")][, .(contrib = sum(contribution_18))] %>% 
   pull()
@@ -155,12 +141,12 @@ growth_17_18  <- round(100*(energy_cons[, list(total_rg = sum(primary_energy_con
 
 # Functions for the boxvalues
 Growth_Global_Primary_Energy = function(...) return(growth_17_18)
-NaturalGas = function(...) return("40%") # Should calculate it & put the variable instead
+NaturalGas = function(...) return("40") # Should calculate it & put the variable instead
 Contribution = function(...) return(top_3_contr)
 
 ```
 
-### Growth of global primary energy consumption.
+### Growth of global primary energy consumption (%).
 
 ```{r}
 articles = Growth_Global_Primary_Energy()
@@ -171,14 +157,14 @@ valueBox(articles, icon = "fa-percent", color = "orange")
 
 ```{r}
 comments = NaturalGas()
-valueBox(comments, icon = "fa-cogs", color = "orange")
+valueBox(comments, icon = "fa-percent", color = "orange")
 ```
 
-### China, US & India accounted for more than two thirds of the global increase in energy demand.
+### China, US & India accounted for more than two thirds of the global increase in energy demand (%).
 
 ```{r}
 cont = Contribution()
-valueBox(cont, icon = "fa-area-chart", color = "orange")
+valueBox(cont, icon = "fa-percent", color = "orange")
 ```
 
 
@@ -190,24 +176,128 @@ Column {.tabset .tabset-fade data-width=550 .custom }
 
 ### __Map of Oil Reserves by country in 2018__ {.custom }
 ```{r fig.height=3}
+# Import region map data. 
+data(worldgeojson, package = "highcharter")
+
+# Create DT of Oil: Proved reserves (thousand million barrels)
+oil_reserves <- wide_to_long_1(6) %>% 
+  .[, oil_proved_reserves_history := round(as.numeric(oil_proved_reserves_history), 2)]
+# Add regions & clean unused rows (totals & remarks)  
+oil_reserves <- get_regions(oil_reserves)
+
+# Change the names of "Russian Federation" to "Russia" & "US", "United States of America" for plotting
+oil_reserves <- oil_reserves[, c("country", "oil_proved_reserves") := .(ifelse(country == "US", "United States of America", ifelse(country == "Russian Federation", "Russia", country)), oil_proved_reserves = oil_proved_reserves_history)]
+
+# Create region map with energy data. 
+highchart() %>%
+hc_add_series_map(worldgeojson, oil_reserves[year == 2018], value = "oil_proved_reserves", joinBy = c('name','country'), name = "Oil Reserves (Thousand million barrels)")  %>% 
+    hc_add_series(oil_reserves, hcaes(x = country, y = oil_proved_reserves, color = oil_proved_reserves), type = "pie", name = 'Oil Reserves (Thousand million barrels)')  %>% 
+    hc_colorAxis(stops = color_stops()) %>%
+    hc_title(text = "Oil Reserves by country in 2018") %>% 
+    hc_subtitle(text = "Thousand million barrels") %>%
+    hc_tooltip(borderWidth = 1.5, valueSuffix = '') %>%
+    hc_plotOptions(
+    pie = list(center = c('10%', '80%'), size = 110, dataLabels = list(enabled = FALSE))) %>% 
+    hc_add_theme(hc_theme_economist()) 
 
 ```
 
 ### __Global oil production__ {.custom }
 ```{r fig.height=3}
+# Create DT of oil_production (Thousand barrels daily)
+oil_production <- wide_to_long_1(7) %>% 
+  .[, oil_production_barrels := round(as.numeric(oil_production_barrels), 2)]
+# Add regions & clean unused rows (totals & remarks)  
+oil_production <- get_regions(oil_production)
 
+oil_production <- oil_production[, country := ifelse(country == "US", "United States of America", ifelse(country == "Russian Federation", "Russia", country))]
+
+# Create the plot with energy data. 
+highchart() %>% 
+    hc_add_series(oil_production[, .(total_oil_production = sum(oil_production_barrels, na.rm =T)), by=.(year, region)], hcaes(x = year, y = total_oil_production/10^3, group = region, color = region), type = "line") %>%
+    hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Year: <b>{point.x}</b> <br>","region: <b>{point.region}</b><br>", "Production: <b>{point.y}</b>")) %>%
+    hc_title(text = "Total oil production by region") %>% 
+    hc_subtitle(text = "Millions barrels daily") %>%
+    hc_xAxis(title = list(text = "Year")) %>%
+    hc_yAxis(title = list(text = "Oil Production - MMbbl (from 1965)")) %>% 
+    hc_legend(enabled = F) %>% 
+    hc_add_theme(hc_theme_economist())
 
 ```
 
 ### __Oil proved, production & consumption__ {.no-padding .custom }
 ```{r fig.height=3}
+# Create tibble for oil_consumption.
+oil_consumption <- wide_to_long_1(11) %>% 
+  .[, list(country = country,
+           year = year,
+           oil_consumption_barrels = round(as.numeric(oil_consumption_barrels), 2))]
+# Add regions & clean unused rows (totals & remarks)  
+oil_consumption <- get_regions(oil_consumption)
+oil_consumption <- oil_consumption[, country := ifelse(country == "US", "United States of America", ifelse(country == "Russian Federation", "Russia", country))]
 
+# create plot_data by joining the 3 df   
+merged_oil <- merge(oil_reserves, oil_production, by = c("country", "year", "region"))
+
+merged_oil <- merge(merged_oil, oil_consumption, by = c("country", "year", "region")) 
+# Set porduction & consumption to millions as  they are in thousands unlike reserves that are already millions 
+
+merged_oil <- merged_oil[, .(region = region,
+               country = country,
+               year = year,
+               oil_proved_reserves = round(oil_proved_reserves, 2),
+               oil_production = round(oil_production_barrels/10^3, 2),
+               oil_consumption = round(oil_consumption_barrels/10^3, 2))]
+
+merged_oil <- merged_oil[, region := ifelse(country == "Algeria", country, region)]
+
+base <- merged_oil %>%
+  plot_ly(x = ~oil_consumption, y = ~oil_production, 
+          text = ~country, hoverinfo = "text", color = ~ region) %>%
+  layout(xaxis = list(type = "sqrt")) %>%
+  layout(yaxis = list(type = "log"))
+
+base %>%
+  add_markers(frame = ~year, ids = ~country, sizeref = 4000, size = ~oil_proved_reserves^10, sizes = c(100, 500), alpha = 0.8, alpha_stroke = 0.8) %>%
+  animation_opts(1000, easing = "elastic", redraw = FALSE) %>%
+  animation_button(
+    x = 1, xanchor = "right", y = 0, yanchor = "bottom"
+  ) %>%
+  animation_slider(
+    currentvalue = list(prefix = "YEAR ", font = list(color="red"))
+  )
   
 ```
 
 ### __Refinery throughput__ {.no-padding .custom }
 ```{r fig.height=3}
+# Create DT of Refinery throughput (Thousand barrels daily).
+refinery_throughput <- wide_to_long_1(17) %>% 
+  .[, oil_refinery_throughput := round(as.numeric(oil_refinery_throughput), 2)]
+# Add regions & clean unused rows (totals & remarks)  
+refinery_throughput <- get_regions(refinery_throughput)
 
+# Create DT of Refinery capacity (Thousand barrels daily).
+refinery_capacity <- wide_to_long_1(18) %>% 
+  .[, oil_refining_capacity := round(as.numeric(oil_refining_capacity), 2)]
+# Add regions & clean unused rows (totals & remarks)  
+refinery_capacity <- get_regions(refinery_capacity)
+
+# Merging refinery throughput & capacity
+refinery_merged_rg <- merge(refinery_capacity[, .(refinery_capacity_rg = sum(oil_refining_capacity, na.rm = T)), by = .(region, year)], refinery_throughput[, .(refinery_throughput_rg = sum(oil_refinery_throughput, na.rm = T)), by = .(region, year)], by = c("region", "year"))
+
+refinery_merged_rg <- refinery_merged_rg[, utilization := round(100*refinery_throughput_rg/refinery_capacity_rg), by = .(region, year)]
+
+# create plot_data    
+highchart() %>% 
+    hc_add_series(refinery_merged_rg[year > 2007], hcaes(x = year, y = utilization, group = region, color = region), type = "line") %>%
+    hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Year: <b>{point.x}</b> <br>","region: <b>{point.region}</b><br>", "Refinery Utilization: <b>{point.y}</b>")) %>%
+    hc_title(text = "Refinery utilization by region") %>% 
+    hc_subtitle(text = "Percentage (based on average annual capacity)") %>%
+    hc_xAxis(title = list(text = "Year")) %>%
+    hc_yAxis(title = list(text = "Utilization rate (%)")) %>% 
+    hc_legend(enabled = F) %>% 
+    hc_add_theme(hc_theme_economist())
 
 ```
 
@@ -215,14 +305,54 @@ Column {.tabset .tabset-fade data-width=550 .custom }
 
 ### __Regional refining margins__ {.no-padding .custom }
 ```{r fig.height=3}
+# Create DT of Refinery mergins (US dollars per barrel).
+refinery_margins <- as.data.table(bp_stats$list.element[[19]] %>% 
+  setNames(c("Date", "USGC_Medium_Sour_Coking", "NWE_Light_Sweet_Cracking", "Singapore_Medium_Sour_Hydrocracking")) %>% 
+  filter(!is.na(Date), !is.na(USGC_Medium_Sour_Coking)))
 
+refinery_margins <- refinery_margins[, lapply(.SD, as.numeric), by = Date, .SDcols=2:4][, lapply(.SD, round), by = Date, .SDcols=2:4]
+# Need to transforme the first column to date structure
+refinery_margins <- refinery_margins[, Date := str_replace(Date, "Q", "/")][, Date := as.yearqtr(Date, format = "%q/%y")]
+# MElting our DT (from large to wide table)
+refinery_margins <- melt(refinery_margins, id.vars = c("Date"),
+                measure.vars = c("USGC_Medium_Sour_Coking", "NWE_Light_Sweet_Cracking", "Singapore_Medium_Sour_Hydrocracking"))
+# create plot_data 
+highchart() %>%
+    hc_add_series(refinery_margins, hcaes(x = Date, y = value, group = variable, color = variable), type = "line") %>%
+    hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Date: <b>{point.x}</b> <br>","Regional margins: <b>{point.variable}</b><br>", "Value: <b>{point.y}</b>")) %>%
+    hc_title(text = "Regional refining margins") %>%
+    hc_subtitle(text = "US dollars per barrel") %>%
+    hc_xAxis(format = "%q/%y") %>%
+    hc_yAxis(title = list(text = "Oil: Regional refining margins")) %>%
+    hc_legend(enabled = F) %>%
+    hc_add_theme(hc_theme_economist())
 
 
 ```
 
 ### __Spot crude prices ($/bbl)__ {.no-padding}
 ```{r fig.height=3}
+# Create DT for Spot oil prices
+oil_spots <- as.data.table(bp_stats$list.element[[15]] %>% 
+  setNames(c("year", "Dubai", "Brent", "Forcados", "WTI")) %>% 
+  filter(!is.na(year)))
+oil_spots <- oil_spots[!(str_detect(year, "[a-zA-Z]+")), .(year = as.integer(year),
+                                                           Dubai = round(as.numeric(Dubai), 2),
+                                                           Brent = round(as.numeric(Brent), 2),
+                                                           Forcados = round(as.numeric(Forcados), 2),
+                                                           WTI = round(as.numeric(WTI), 2))]
+  
 
+oil_spots %>% 
+  dygraph(main = "Spot crude prices ($/bbl)") %>% 
+  dyRangeSelector() %>% 
+  dyOptions(drawPoints = TRUE, pointSize = 2) %>%
+  dyShading(from = "1978", to = "1986", color = "#FFE6E6") %>%
+  dyShading(from = "2000", to = "2008", color = "#CCEBD6") %>%
+  dyShading(from = "2011", to = "2016", color = "#FFE6E6") %>% 
+  dyEvent("1986", "The 1986 oil price collapse", labelLoc = "bottom") %>% 
+  dyEvent("2008", "Subprime mortgage crisis", labelLoc = "bottom") %>% 
+  dyEvent("2014", "Oil price crash", labelLoc = "bottom")
 ```
 
 
@@ -231,32 +361,40 @@ Column {data-width=300}
 
 
 ```{r include=FALSE}
-
+# these computing functions for the boxvalues
+Oil_Price = function(...) return("$71.31 per barrel")
+Oil_Consumption = function(...) return("1.4 million b/d")
+Oil_Production = function(...) return("2.2 million b/d")
+Refinery_Throughput = function(...) return("960,000 b/d")
 
 ```
 
 ### Annual average Dated Brent 2018.
 
 ```{r}
- 
+articles = Oil_Price()
+valueBox(articles, icon = "fa-dollar", color = "orange") 
 ```
 
-### Oil consumption.
+### Oil consumption grew by an above-average of 1.5% (China (680 kb/d) & US (500 kb/d) the largest contributors).
 
 ```{r}
-
+comments = Oil_Consumption()
+valueBox(comments, icon = "fa-area-chart", color = "orange")
 ```
 
-### Global oil production.
+### Global oil production (mainly from US).
 
 ```{r}
-
+cont = Oil_Production()
+valueBox(cont, icon = "fa-area-chart", color = "orange")
 ```
 
-### Refinery throughput.
+### Refinery throughput (down from 1.5 million b/d in 2017).
 
 ```{r}
- 
+refinery = Refinery_Throughput()
+valueBox(refinery, icon = "fa-area-chart", color = "orange") 
 ```
 
 
@@ -402,12 +540,4 @@ Column {data-width=300}
 
 ```
 
-
-About {data-icon="fa-info-circle"}
-=======================================================================
-
-Column {data-width=600}
------------------------------------------------------------------------
-
-### { .custom }
 
