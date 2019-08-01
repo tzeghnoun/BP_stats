@@ -406,44 +406,261 @@ Column {.tabset .tabset-fade data-width=550 .custom }
 
 ### __Map of Gas Reserves by country in 2018__ {.custom }
 ```{r fig.height=3}
+# Create DT for Gas Proved reserves (Trillion cubic metres)
+gas_reserves <- wide_to_long_1(24) %>% 
+  .[, gas_proved_reserves := round(as.numeric(gas_proved_reserves_history_), 2)]
+# Add regions & clean unused rows (totals & remarks)  
+gas_reserves <- get_regions(gas_reserves)
 
+# Change the names of "Russian Federation" to "Russia" & "US", "United States of America" for plotting
+gas_reserves <- gas_reserves[, country := ifelse(country == "US", "United States of America", ifelse(country == "Russian Federation", "Russia", country))]
 
+# Create region map with energy data. 
+highchart() %>%
+hc_add_series_map(worldgeojson, gas_reserves[year == 2018], value = "gas_proved_reserves", joinBy = c('name','country'), name = "Gas Reserves (Trillion cubic metres)")  %>% 
+    hc_add_series(gas_reserves, hcaes(x = country, y = gas_proved_reserves, color = gas_proved_reserves), type = "pie", name = 'Gas Reserves (Trillion cubic metres)')  %>% 
+    hc_colorAxis(stops = color_stops()) %>% 
+    hc_title(text = "Gas Reserves by country in 2018") %>% 
+    hc_subtitle(text = "Trillion cubic metres") %>%
+    hc_tooltip(borderWidth = 1.5, valueSuffix = '') %>%
+    hc_plotOptions(
+    pie = list(center = c('10%', '80%'), size = 110, dataLabels = list(enabled = FALSE))) %>% 
+    hc_add_theme(hc_theme_economist()) 
 
 ```
 
 ### __Natural gas consumption__ {.no-padding}
 ```{r fig.height=3}
+# Create DT for Natural Gas Consumption (Billion cubic metres)
+ng_cons <- wide_to_long_1(28) %>% 
+  .[, gas_consumption_bcm := round(as.numeric(gas_consumption_bcm), 2)]
+# Add regions & clean unused rows (totals & remarks)  
+ng_cons <- get_regions(ng_cons)
 
+ng_cons_diff_17_18 <- ng_cons[year %in% c(2017, 2018), .(total_gas_consumption = sum(gas_consumption_bcm, na.rm = T)), by = .(year)][, total_gas_consumption - shift(total_gas_consumption)]
 
-
+# plot 
+highchart() %>% 
+    hc_add_series(ng_cons[, .(total_gas_consumption = sum(gas_consumption_bcm, na.rm = T)), by = .(region, year)], hcaes(x = year, y = total_gas_consumption, group = region, color = region), type = "line") %>%
+    hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Year: <b>{point.x}</b> <br>","region: <b>{point.region}</b><br>", "Consumption: <b>{point.y}</b>")) %>%
+    hc_title(text = "Total natural gas consumption by region") %>% 
+    hc_subtitle(text = "Bcm") %>%
+    hc_xAxis(title = list(text = "Year")) %>%
+    hc_yAxis(title = list(text = "Natural Gas: Consumption - Bcm (from 1965)")) %>% 
+    hc_legend(enabled = F) %>% 
+    hc_add_theme(hc_theme_economist())
 
 ```
 
 ### __Growth in gas consumption__ {.no-padding}
 ```{r fig.height=3}
+# Generate DT for gas contribution for 2018 (Billion cubic metres)
+gas_contribution_18 <- ng_cons %>% 
+  .[year %in% c(2017, 2018) & country != "USSR"] %>% 
+  .[order(-gas_consumption_bcm)] %>% 
+  .[, country_rank := ifelse(.I <=8, country, region)] %>% 
+  .[, .(total_cons = sum(gas_consumption_bcm, na.rm = T)), by = c("country_rank", "year", "region")]
 
+
+# extract the regions of top 4 contributeurs to convert them to Other regions for the other countries belonging to those regions (here : Other America, Other Asia & Other CIS)
+
+region_rank <- gas_contribution_18[1:8,  .(region = unique(region))]
+
+gas_contribution_18 <- gas_contribution_18[,  country := ifelse(country_rank %in% region_rank$region, paste0("other_", country_rank), country_rank)]
+
+# Calculate top 3 contributors in 2018
+
+# Adding the difference Y-on-Y for each country & for the total (lag) in order to calculate the percentage of contribution to the growth by country / region
+
+Annual_gas_gr <- na.omit(gas_contribution_18[order(year)
+                                     ][, lapply(.SD, function(x) 
+                                       x-shift(x)), by = country, .SDcols=4
+                                       ][, c("country", "diff_17_18", "gas_contribution_18", "total_cons") := .(country, total_cons, round(100*total_cons / sum(total_cons, na.rm = T), 2), NULL)
+                                         ])[order(-gas_contribution_18)]
+
+                               
+top_3_gas_contr <- Annual_gas_gr[, head(.SD, 3), .SDcols=c("country", "gas_contribution_18")][, .(contrib = sum(gas_contribution_18))] %>% 
+  pull()
+
+
+# Create a line plot.
+highchart() %>%
+    hc_add_series(Annual_gas_gr, hcaes(x = country, y = gas_contribution_18, group = country), type = "column") %>%
+    hc_tooltip(pointFormat = paste("<b>{point.y} %</b>")) %>%
+    hc_title(text = "Contribution to gas consumption growth in 2018 (%)") %>%
+    hc_subtitle(text = "") %>%
+    hc_yAxis(title = list(text = "Contribution to gas consumption growth (%)"),
+             labels = list(format = "{value}%")) %>%
+    hc_add_theme(hc_theme_economist())
 
 ```
 
 ### __Global natural gas production__ {.no-padding}
 ```{r fig.height=3}
+# Create for DT for Natural Gas Production (Billion cubic metres)
+ng_production <- wide_to_long_1(25) %>% 
+  .[, gas_production_bcm := round(as.numeric(gas_production_bcm), 2)]
+# Add regions & clean unused rows (totals & remarks)  
+ng_production <- get_regions(ng_production)
 
-
+# create a plot
+highchart() %>% 
+    hc_add_series(ng_production[, .(total_gas_production = sum(gas_production_bcm, na.rm = T)), by = .(region, year)], hcaes(x = year, y = total_gas_production, group = region, color = region), type = "line") %>%
+    hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Year: <b>{point.x}</b> <br>","region: <b>{point.region}</b><br>", "Production: <b>{point.y}</b>")) %>%
+    hc_title(text = "Total natural gas production by region") %>% 
+    hc_subtitle(text = "Bcm") %>%
+    hc_xAxis(title = list(text = "Year")) %>%
+    hc_yAxis(title = list(text = "Natural Gas: production - Bcm (from 1965)")) %>% 
+    hc_legend(enabled = F) %>% 
+    hc_add_theme(hc_theme_economist())
 ```
 
 ### __Growth in inter-regional natural gas trade__ {.no-padding}
 ```{r message=FALSE, warning=FALSE}
+# Create DT for Growth in inter-regional natural gas trade (Billion cubic metres)
+dt <- as.data.table(bp_stats$list.element[[32]])
+# set few indexes to help me rename the columns and get rid of the unused columns
+# first calculat the number of columns & take off 2
+x <- ncol(dt) - 2
+# get the second column name that will be used as the first date of our column serie of dates from 
+# 2000 to the end of our column
+y <- names(dt[,2])
+x <- x + as.integer(y)
+# set the names vector of our dt
+col_names <- as.character(c("variable", y:x))
+# change the names
+names(dt) <- col_names
+# get the position of the year 2018 to get rid of all the column above it
+yr_2018 <- which(str_detect(col_names, "2018"))
+dt <- dt[, 1:yr_2018]
+# Now we need to get rid of the unused rows
+# remove all row below the row that contains "Total trade" (rows containing comments)
+dt <- dt[1:which(str_detect(variable, "Total trade"))]
+# add country column to the dt. The 2 first operations set the country values
+# in the new column and feel the rest with NA. The last operation roll on the country vector and feel all the NA with the correspondant country value
+dt <- dt[, country := rowSums(.SD), .SDcols=2:ncol(dt)
+         ][, country := ifelse(is.na(country), variable, NA_character_)
+           ][, country := country[1], by = cumsum(!is.na(country)) # trick to roll up the values
+             ]
+dt <- na.omit(dt[, variable := str_replace(variable, "LNG exports(.)?", "LNG exports")])
+dt <- melt(dt, id.vars = c("country", "variable"), measure.vars = 2:20, variable.name = "year", value.name = "inter_reg")
+names(dt) <- c("country", "type", "year", "inter_reg")
+dt <- dt[, ":=" (year = as.character(year),
+         inter_reg = round(inter_reg, 2))]
 
+highchart() %>% 
+  hc_add_series(dt[type == "LNG exports" & !str_detect(type, "^Total"), .(total = sum(inter_reg, na.rm = T)), nomatch=0, by = .(year)], hcaes(x = as.numeric(year), y = total), type = "line") %>%
+  hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Year: <b>{point.x}</b> <br>","LNG Export: <b>{point.y}</b>")) %>%
+  hc_title(text = "Growth of total LNG export since 2000") %>% 
+  hc_subtitle(text = "Bcm") %>%
+  hc_xAxis(title = list(text = "Year")) %>%
+  hc_yAxis(title = list(text = "LNG export - Bcm (from 2000)"),
+            plotBands = list(
+             list(from = 400, to = 450,
+                  label = list(text = "Growth in inter-regional natural gas trade was 39 bcm or 4.3%,", fontSize='15px')),
+             list(from = 350, to = 400,
+                  label = list(text = "more than double the 10-year average, driven largely by continuing")),
+             list(from = 300, to = 350,
+                  label = list(text = "rapid expansion in liquefied natural gas (LNG).")))) %>% 
+  hc_legend(enabled = F) %>%  
+  hc_add_theme(hc_theme_economist())
 ```
 
 ### __LNG trade movements 2018__ {.no-padding}
-```{r }
- 
+```{r fig.height=3}
+ # Create DT for LNG trade movements 2018 (Billion cubic metres)
+dt <- as.data.table(bp_stats$list.element[[35]])
+name_col <- dt[1, 1:24] # get the first row that contains the variables names
+names(dt) <- as.character(name_col[1, ]) # set the variables names
+dt <- dt[2:40]
+# melt the dt from wide to long
+dt <- melt(dt, id.vars = "To", measure.vars = c(2:24), variable.name = "from")
+dt <- dt[, value := round(as.numeric(value), 2)]
+dt <- dt[!from %like% "^Total"][!To %like% "^Total"] # remove totals
+setcolorder(dt, c("from", "To", "value"))
+dt <- dt[value > 0]
+
+# Load the world map dataset
+world <- map_data("world")
+world <- as.data.table(world)
+world <- world[!region %like% "Antarctica"]
+# Get the long & lat data of the capital cities tp serve as nodes
+capitals <- maps::world.cities
+capitals <- as.data.table(capitals)
+capitals <- capitals[capital == 1]
+names(capitals) <- c("name", "from", "pop", "lat", "long", "cap")
+capitals <- capitals[, .(from, long, lat)]
+
+# Harmonize the names of US, Russia & UK with the map names
+dt <- dt[, c("from", "To") := .(ifelse(from %like% "US", "USA", ifelse(from %like% "Federation", "Russia", as.character(from))),
+                          ifelse(To %like% "US", "USA", as.character(To)))
+         ][, c("from", "To") := .(ifelse(from %like% "United Kingdom", "UK", as.character(from)), ifelse(To %like% "United Kingdom", "UK", as.character(To)))]
+
+# add the long & lat data to the dt
+dt <- dt %>% 
+  inner_join(capitals, by = c(from = "from"))
+names(dt) <- c("from",  "to",  "value", "start_long", "start_lat")
+names(capitals) <- c("to", "long", "lat")
+dt <- as.data.table(dt)
+
+dt <- dt %>% 
+  inner_join(capitals, by = c(to = "to"))
+
+
+# Ploting the network map for the LNG trade movements 2018
+base_gg <- ggplot() +
+  geom_polygon(data = world,
+               aes(long, lat, group = group), 
+               show.legend = FALSE,
+               alpha = 0.5,
+               color = "gray") +
+  geom_segment(data = dt, 
+               aes(x = start_long, xend = long,
+                   y = start_lat, yend = lat),
+               color = "turquoise2",
+               size = dt$value/5,
+               alpha = 0.5) +
+  geom_point(data = dt,
+             aes(start_long, start_lat), color = "red", size = 3, alpha = .7) +
+  geom_point(data = dt,
+             aes(long, lat), color = "white", size = 3, alpha = .5) +
+  labs(title = "LNG trade movements 2018 (Bcm)",
+       subtitle = "Red cercles represent the exporting countries",
+       caption = "T.Z") +
+  dark_mode() +
+  theme(axis.line = element_line(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank())
+base_gg +
+  coord_cartesian(xlim = c(dt["start_long", "min"],
+                           dt["start_long", "max"]),
+                  ylim = c(dt["start_lat", "min"],
+                           dt["start_lat", "max"]))
 ```
 
-### __Gas prices ($/Million Btu)__ {.no-padding}
+### __Gas prices__ {.no-padding}
 ```{r fig.height=3}
- 
+# Create DT for Gas prices ($/Million Btu)
+gas_prices <- as.data.table(bp_stats$list.element[[31]] %>% 
+  setNames(c("year", "Japan_CIF", "Japan_Korea_Marker", "Average_German_Import", "UK_NBP", "Netherlands_TTF", "US_HH", "Canada_Alberta", "OCDE_CIF")) %>% 
+    na.omit(., cols="year")) %>% 
+  .[, lapply(.SD, as.numeric), by = year, .SDcols = 2:9] %>% 
+  .[, lapply(.SD, round), by = year, .SDcols = 2:9] %>% 
+  .[, year := year(anytime::anydate(year))]
+
+
+gas_prices %>% 
+  dygraph(main = "Gas prices ($/Million Btu)") %>% 
+  dyRangeSelector() %>% 
+  dyShading(from = "1990", to = "2002", color = "#FFE6E6") %>%
+  dyShading(from = "2002", to = "2008", color = "#CCEBD6") %>%
+  dyShading(from = "2009", to = "2013", color = "#FFE6E6") %>% 
+  dyEvent("2008", "Economic recession", labelLoc = "bottom") %>% 
+  dyLegend(show = "follow") 
 ```
 
 Column {data-width=300}
@@ -451,26 +668,32 @@ Column {data-width=300}
 
 
 ```{r include=FALSE}
- 
+# these computing functions for the boxvalues
+Gas_Production = function(...) return("190 bcm")
+Gas_Cons = function(...) return("195 bcm")
+Gas_Cons_Growth = function(...) return(ng_cons_diff_17_18[2]) 
 ```
 
-### Global natural gas production.
+### Global natural gas production increased by 190 bcm (5.2%).
 
 ```{r}
- 
+cont = Gas_Production()
+valueBox(cont, icon = "fa-area-chart", color = "orange") 
 ```
 
 
-###  Natural gas consumption.
+### Natural gas consumption rose by 5.3%, one of the fastest rates of growth since 1984.
 
 ```{r}
- 
+articles = Gas_Cons()
+valueBox(articles, icon = "fa-area-chart", color = "orange") 
 ```
 
-### Growth in gas consumption.
+### Growth in gas consumption was driven mainly by the US, China, Russia & Iran.
 
 ```{r}
- 
+ comments = Gas_Cons_Growth()
+valueBox(comments, icon = "fa-area-chart", color = "orange")
 ```
 
 
