@@ -703,34 +703,119 @@ Renewables, hydro and nuclear {data-icon="fa-signal"}
 Column {.tabset .tabset-fade data-width=550 .custom }
 -----------------------------------------------------------------------
 
-### __Renewable Energy Generation by source (Terawatt-hours)__ {.no-padding}
+### __Renewable Energy Generation by source__ {.no-padding}
 ```{r fig.height=3}
- 
+# Create DT for Renewables Energy Generation (Terawatt-hours)
+renew_energy <- as.data.table(bp_stats$list.element[[50]])
+# Clean the dt
+number_col <- ncol(renew_energy) - 4
+renew_energy <- renew_energy[, .SD, .SDcols=1:9] # remove the 4th last column that represente the growth 2018/2017
+names(renew_energy) <- c("country","Wind_2017", "Solar_2017", "Other_renewables_2017",  "Total_2017",
+                         "Wind_2018", "Solar_2018", "Other_renewables_2018",  "Total_2018") 
+number_row <- renew_energy[, which(str_detect(country, "Total\\s?World"))] # get the number of the last useful row (Total World) to remove the rows with comments
+renew_energy <- na.omit(renew_energy[1:number_row])
+# Add a column of regions using the get_regions function we define in the script
+renew_energy <- get_regions(renew_energy)
+number_col <- ncol(renew_energy) # get the number of columns to apply rounding to the numerical columns(from 2 to last-1)
+renew_energy <- renew_energy[, lapply(.SD, round, 2), .SDcols=2:(number_col - 1), by = .(country, region)]
+#Remove columns of totals
+renew_energy <- renew_energy[, .SD, .SDcols = !patterns("^Total"), , by = .(country, region)]
+# melt the dt
+renew_energy <- melt(renew_energy, id.vars = c("country", "region"), measure.vars = c(3:8), variable.name = "type_year")  
+# Split the type_year column in two columns
+renew_energy <- renew_energy[, c("type", "year", "type_year") := .(str_extract(tolower(type_year), "[a-z]+"), str_extract(type_year, "\\d+"), NULL)]
+# reorder the columns
+renew_energy <- setcolorder(renew_energy, c("country", "region", "year", "type", "value"))
+
+hchart(renew_energy[, .(total = sum(value, na.rm = T)), by = .(year, type)], "column", hcaes(x = type, y = total, group = year)) %>% 
+  hc_title(text = "Renewable Energy Generation by source (Terawatt-hours)", style = list(color = "#111111")) 
 ```
 
 ### __Contribution by country__ {.no-padding}
 ```{r fig.height=3}
- 
-```
+# Generate the dt
+dt <- as.data.table(bp_stats$list.element[[49]])
+# Rename the first column
+old_name <- names(dt[, 1])
+colnames(dt)[colnames(dt) == old_name] <- 'country'
 
-### __Hydroelectric generation__ {.no-padding}
-```{r fig.height=3}
- 
-```
+# Remove all the rows beyond the "Total World" row (comments)
+number_row <- dt[, which(str_detect(country, "Total\\s?World"))]  
+dt <- dt[1:number_row]
 
-### __Nuclear generation__ {.no-padding}
-```{r fig.height=3}
- 
-```
+# Remove columns beyond 2018
+number_col <- 2018 - as.integer(names(dt[, 2])) + 2
+dt <- dt[, 1: number_col]
+names(dt) <- c("country", "1965":"2018")
 
+# Remove empty rows and rows of totals
+dt <- dt[!is.na(country) & !country %like% "Total"]
+dt <- melt(dt, id.vars = "country", measure.vars = c(2:number_col), variable.name = "year")
+
+# Tidy the dt
+dt <- dt[, .(country, 
+             year = as.integer(as.character(year)),
+             renewables_mtoe = round(as.numeric(value), 2))]
+
+# Calculate the Annual growth 
+Annual_gr <- dt[year %in% c(2017, 2018) & country != "USSR"
+               ][order(year, -renewables_mtoe)
+                 ][, lapply(.SD, function(x) 
+                                       x-shift(x)), by = country, .SDcols=3
+                   ][order(-renewables_mtoe)]
+
+# Get the top 10 countries
+top_10 <- Annual_gr[1:10, 1]
+
+# Lump all the other countries to "Others"
+Annual_gr <- Annual_gr[, country := ifelse(!country %in% top_10$country, "Others", country)]
+Annual_gr <- Annual_gr[, lapply(.SD, sum, na.rm = TRUE), .SDcols = "renewables_mtoe", by = country
+                       ][, lapply(.SD, round, 2), .SDcols = "renewables_mtoe", by = country]
+
+highchart() %>%
+    hc_add_series(Annual_gr, hcaes(x = country, y = renewables_mtoe, group = country), type = "column") %>%
+    hc_tooltip(pointFormat = paste("<b>{point.y} </b>")) %>%
+    hc_title(text = "Contribution to renewables growth in 2018 (mtoe)") %>%
+    hc_subtitle(text = "") %>%
+    hc_yAxis(title = list(text = "Contribution to renewables growth (mtoe)"),
+             labels = list(format = "{value}")) %>%
+    hc_add_theme(hc_theme_economist()) 
+```
 
 Column {data-width=300}
 -----------------------------------------------------------------------
 
-### {.no-padding  }
-```{r fig.height=3}
 
+```{r include=FALSE}
+# these computing functions for the boxvalues
+Renew_Generation = function(...) return("14.5%")
+Solar_Gen = function(...) return("40%")
+China_Contr = function(...) return("32 mtoe") 
 ```
+
+### Renewable power grew by 14.5%.
+
+```{r}
+cont = Renew_Generation()
+valueBox(cont, icon = "fa-percent", color = "orange") 
+```
+
+
+### Solar generation grew by 30 mtoe, providing more than 40% of renewables growth.
+
+```{r}
+articles = Solar_Gen()
+valueBox(articles, icon = "fa-percent", color = "orange") 
+```
+
+### China the largest contributor to renewables growth (32 mtoe).
+
+```{r}
+ comments = China_Contr()
+valueBox(comments, icon = "fa-area-chart", color = "orange")
+```
+
+
 
 Electricity {data-icon="fa-signal"}
 ========================================================================
@@ -740,12 +825,27 @@ Column {.tabset .tabset-fade data-width=550 .custom }
 
 ### __Electricity generation__ {.no-padding}
 ```{r fig.height=3}
- 
+# Generate the dt
+dt <- as.data.table(wide_to_long_1(59))
+dt <- dt[, c("electricity_generation", "electricity_generation_") := .(round(as.numeric(electricity_generation_), 2), NULL)]
+
+# Get regions
+dt <- get_regions(dt) 
 ```
 
 ### __Contribution by source__ {.no-padding}
 ```{r fig.height=3}
- 
+# Get the dt
+dt <- as.data.table(bp_stats$list.element[[60]])
+names(dt) <- c("country", "oil_17", "ng_17", "coal_17", "nuclear_17", "hydroelectric_17", "renewables_17", "others_17", "total_17", "oil_18", "ng_18", "coal_18", "nuclear_18", "hydroelectric_18", "renewables_18", "others_18", "total_18")
+
+# Get the index of the "Total World" row to remove the rows beyond it (rows containing comments)
+index <- dt[, which(country %like% "Total World")]
+dt <- na.omit(dt[1:index])
+dt <- dt[, lapply(.SD, round, 2), .SDcols = 2:17, by = country]
+
+# Get regions
+dt <- get_regions(dt) 
 
 ```
 
