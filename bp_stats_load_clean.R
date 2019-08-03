@@ -26,6 +26,7 @@ library(formattable)
 library(kableExtra)
 library(ggthemes)
 library(ggdark)
+library(scales)
 
 
 # Loading and cleaning datasets

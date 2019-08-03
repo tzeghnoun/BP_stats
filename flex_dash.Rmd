@@ -89,7 +89,7 @@ fuel_plot_data <- melt(fuel_region, id.vars = c("region"), measure.vars = c("oil
 # Create line plot.
 hchart(fuel_plot_data[year == "2018", .(region, fuel_cons, freq =paste0(round((100*fuel_cons)/sum(fuel_cons, na.rm = TRUE), 2), "%")), by = .(fuel)], "column", hcaes(x = fuel, y = fuel_cons, group = region)) %>%
     hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("region: <b>{point.region}</b><br>", "Consumption: <b>{point.y}</b><br>", "Contribution: <b>{point.freq}</b>")) %>%
-    hc_title(text = "Total primary energy consumption by fuel") %>%
+    hc_title(text = "Total primary energy consumption by fuel (2018)") %>%
     hc_subtitle(text = "Million tonnes oil equivalent") %>%
     hc_xAxis(title = list(text = "fuel")) %>%
   hc_yAxis(title = list(text = "Primary Energy Consumption by fuel in 2018")) %>%
@@ -191,13 +191,10 @@ oil_reserves <- oil_reserves[, c("country", "oil_proved_reserves") := .(ifelse(c
 # Create region map with energy data. 
 highchart() %>%
 hc_add_series_map(worldgeojson, oil_reserves[year == 2018], value = "oil_proved_reserves", joinBy = c('name','country'), name = "Oil Reserves (Thousand million barrels)")  %>% 
-    hc_add_series(oil_reserves, hcaes(x = country, y = oil_proved_reserves, color = oil_proved_reserves), type = "pie", name = 'Oil Reserves (Thousand million barrels)')  %>% 
     hc_colorAxis(stops = color_stops()) %>%
     hc_title(text = "Oil Reserves by country in 2018") %>% 
     hc_subtitle(text = "Thousand million barrels") %>%
     hc_tooltip(borderWidth = 1.5, valueSuffix = '') %>%
-    hc_plotOptions(
-    pie = list(center = c('10%', '80%'), size = 110, dataLabels = list(enabled = FALSE))) %>% 
     hc_add_theme(hc_theme_economist()) 
 
 ```
@@ -418,13 +415,10 @@ gas_reserves <- gas_reserves[, country := ifelse(country == "US", "United States
 # Create region map with energy data. 
 highchart() %>%
 hc_add_series_map(worldgeojson, gas_reserves[year == 2018], value = "gas_proved_reserves", joinBy = c('name','country'), name = "Gas Reserves (Trillion cubic metres)")  %>% 
-    hc_add_series(gas_reserves, hcaes(x = country, y = gas_proved_reserves, color = gas_proved_reserves), type = "pie", name = 'Gas Reserves (Trillion cubic metres)')  %>% 
     hc_colorAxis(stops = color_stops()) %>% 
     hc_title(text = "Gas Reserves by country in 2018") %>% 
     hc_subtitle(text = "Trillion cubic metres") %>%
     hc_tooltip(borderWidth = 1.5, valueSuffix = '') %>%
-    hc_plotOptions(
-    pie = list(center = c('10%', '80%'), size = 110, dataLabels = list(enabled = FALSE))) %>% 
     hc_add_theme(hc_theme_economist()) 
 
 ```
@@ -697,11 +691,61 @@ valueBox(comments, icon = "fa-area-chart", color = "orange")
 ```
 
 
-Renewables, hydro and nuclear {data-icon="fa-signal"}
+Electricity & Renewables {data-icon="fa-signal"}
 ========================================================================
 
 Column {.tabset .tabset-fade data-width=550 .custom }
 -----------------------------------------------------------------------
+
+### __Electricity generation__ {.no-padding}
+```{r fig.height=3}
+# Generate the dt for Electricity generation (Terawatt-hours)
+electricity_generation <- as.data.table(wide_to_long_1(59))
+electricity_generation <- electricity_generation[, c("electricity_generation", "electricity_generation_") := .(round(as.numeric(electricity_generation_), 2), NULL)]
+
+# Get regions
+electricity_generation <- get_regions(electricity_generation) 
+
+# Create a line plot.
+highchart() %>% 
+    hc_add_series(electricity_generation[, .(total_electricity_generation = sum(electricity_generation, na.rm = T)), by = c("region", "year")], hcaes(x = year, y = total_electricity_generation, group = region, color = region), type = "line") %>%
+    hc_tooltip(crosshairs = TRUE, borderWidth = 1.5, headerFormat = "", pointFormat = paste("Year: <b>{point.x}</b> <br>","region: <b>{point.region}</b><br>", "Generation: <b>{point.y}</b>")) %>%
+    hc_title(text = "Total electricity generation by region") %>% 
+    hc_subtitle(text = "Mtoe") %>%
+    hc_xAxis(title = list(text = "Year")) %>%
+    hc_yAxis(title = list(text = "Electricity generation - Terawatt-hours (from 1965)")) %>% 
+    hc_legend(enabled = F) %>% 
+    hc_add_theme(hc_theme_economist())
+```
+
+### __Contribution by fuel (Terawatt-hours)__ {.no-padding}
+```{r fig.height=3}
+# Get the dt for Electricity Contribution by fuel (Terawatt-hours)
+contribution_source <- as.data.table(bp_stats$list.element[[60]])
+names(contribution_source) <- names(contribution_source) <- c("country", "Oil_2017", "NaturalGas_2017", "Coal_2017", "Nuclear_2017", "Hydroelectric_2017", "Renewables_2017", "Others_2017",  "Total_2017", "Oil_2018", "NaturalGas_2018", "Coal_2018", "Nuclear_2018", "Hydroelectric_2018", "Renewables_2018", "Others_2018",  "Total_2018") 
+
+# Get the index of the "Total World" row to remove the rows beyond it (rows containing comments)
+index <- contribution_source[, which(country %like% "Total World")]
+contribution_source <- na.omit(contribution_source[1:index])
+contribution_source <- contribution_source[, lapply(.SD, round, 2), .SDcols = 2:17, by = country]
+
+# Get regions
+contribution_source <- get_regions(contribution_source) 
+
+#Remove columns of totals
+contribution_source <- contribution_source[, .SD, .SDcols = !patterns("^Total"), , by = .(country, region)]
+# melt the dt
+contribution_source <- melt(contribution_source, id.vars = c("country", "region"), measure.vars = c(3:16), variable.name = "type_year")  
+# Split the type_year column in two columns
+contribution_source <- contribution_source[, c("type", "year", "type_year") := .(str_extract(tolower(type_year), "[a-z]+"), str_extract(type_year, "\\d+"), NULL)]
+# reorder the columns
+contribution_source <- setcolorder(contribution_source, c("country", "region", "year", "type", "value"))
+
+hchart(contribution_source[, .(total = sum(value, na.rm = T)), by = .(year, type)], "column", hcaes(x = type, y = total, group = year)) %>% 
+  hc_title(text = "The share of renewable power in global power generation reached 9.32 % but coal still accounting for the largest share at 38%", style = list(color = "#111111")) 
+
+```
+
 
 ### __Renewable Energy Generation by source__ {.no-padding}
 ```{r fig.height=3}
@@ -788,10 +832,19 @@ Column {data-width=300}
 
 ```{r include=FALSE}
 # these computing functions for the boxvalues
+Elect_Generation = function(...) return("3.7%")
 Renew_Generation = function(...) return("14.5%")
 Solar_Gen = function(...) return("40%")
 China_Contr = function(...) return("32 mtoe") 
 ```
+
+### Electricity generation rose by an above-average 3.7%
+
+```{r}
+cont = Elect_Generation()
+valueBox(cont, icon = "fa-percent", color = "orange") 
+```
+
 
 ### Renewable power grew by 14.5%.
 
@@ -814,53 +867,4 @@ valueBox(articles, icon = "fa-percent", color = "orange")
  comments = China_Contr()
 valueBox(comments, icon = "fa-area-chart", color = "orange")
 ```
-
-
-
-Electricity {data-icon="fa-signal"}
-========================================================================
-
-Column {.tabset .tabset-fade data-width=550 .custom }
------------------------------------------------------------------------
-
-### __Electricity generation__ {.no-padding}
-```{r fig.height=3}
-# Generate the dt
-dt <- as.data.table(wide_to_long_1(59))
-dt <- dt[, c("electricity_generation", "electricity_generation_") := .(round(as.numeric(electricity_generation_), 2), NULL)]
-
-# Get regions
-dt <- get_regions(dt) 
-```
-
-### __Contribution by source__ {.no-padding}
-```{r fig.height=3}
-# Get the dt
-dt <- as.data.table(bp_stats$list.element[[60]])
-names(dt) <- c("country", "oil_17", "ng_17", "coal_17", "nuclear_17", "hydroelectric_17", "renewables_17", "others_17", "total_17", "oil_18", "ng_18", "coal_18", "nuclear_18", "hydroelectric_18", "renewables_18", "others_18", "total_18")
-
-# Get the index of the "Total World" row to remove the rows beyond it (rows containing comments)
-index <- dt[, which(country %like% "Total World")]
-dt <- na.omit(dt[1:index])
-dt <- dt[, lapply(.SD, round, 2), .SDcols = 2:17, by = country]
-
-# Get regions
-dt <- get_regions(dt) 
-
-```
-
-### __Share of renewables in power generation__ {.no-padding}
-```{r fig.height=3}
- 
-```
-
-
-Column {data-width=300}
------------------------------------------------------------------------
-
-### {.no-padding  }
-```{r fig.height=3}
-
-```
-
 
